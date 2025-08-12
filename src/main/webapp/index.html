@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hello World</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css"
+          crossorigin="anonymous">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand" href="#">Web programiranje</a>
+</nav>
+
+<div class="container mt-5">
+
+    <!-- Login forma -->
+    <div id="login-section">
+        <h2>Login</h2>
+        <form id="login-form" class="mb-4">
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" class="form-control" id="login-username" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" class="form-control" id="login-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Login</button>
+            <div id="login-error" class="text-danger mt-2" style="display:none;"></div>
+        </form>
+    </div>
+
+    <!-- Post forma -->
+    <button class="btn btn-primary mb-3" id="toggle-form-btn" style="display: none;">New Post</button>
+
+    <form method="POST" id="post-form" class="mb-4" style="display: none;">
+        <div class="form-group">
+            <label for="post-title">Title</label>
+            <input type="text" class="form-control" id="post-title" placeholder="Enter title">
+        </div>
+        <div class="form-group">
+            <label for="post-content">Content</label>
+            <textarea class="form-control" id="post-content" placeholder="Enter content"></textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Submit</button>
+    </form>
+
+    <!-- Lista postova -->
+    <div id="post-list" style="display: none;"></div>
+
+    <!-- Detalji posta -->
+    <div id="post-detail" style="display: none;">
+        <h2 id="detail-title"></h2>
+        <p><strong id="detail-author"></strong></p>
+        <p><small id="detail-date"></small></p>
+        <p id="detail-content"></p>
+
+        <h4 class="mt-4">Comments</h4>
+        <div id="comments-list" class="mb-3"></div>
+
+        <h5>New comment</h5>
+        <form id="comment-form">
+            <div class="form-group">
+                <textarea id="comment-content" class="form-control" placeholder="Comment"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Comment</button>
+        </form>
+
+        <button class="btn btn-link mt-3" id="back-to-list">Back to posts</button>
+    </div>
+</div>
+
+<script>
+    const postList = document.getElementById('post-list');
+    const postForm = document.getElementById('post-form');
+    const toggleBtn = document.getElementById('toggle-form-btn');
+    const postDetail = document.getElementById('post-detail');
+    const commentForm = document.getElementById('comment-form');
+    const detailTitle = document.getElementById('detail-title');
+    const detailAuthor = document.getElementById('detail-author');
+    const detailDate = document.getElementById('detail-date');
+    const detailContent = document.getElementById('detail-content');
+    const commentsList = document.getElementById('comments-list');
+
+    let currentPostId = null;
+
+    toggleBtn.addEventListener('click', () => {
+        postForm.style.display = postForm.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('back-to-list').addEventListener('click', () => {
+        postDetail.style.display = 'none';
+        postList.style.display = 'block';
+        toggleBtn.style.display = 'inline-block';
+    });
+
+    document.getElementById('login-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+
+        fetch('/api/users/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        })
+            .then(async res => {
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    document.getElementById('login-error').innerText = errorData.message || "Login failed.";
+                    document.getElementById('login-error').style.display = 'block';
+                    return;
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (!data) return;
+
+                localStorage.setItem('username', username);
+
+                document.getElementById('login-section').style.display = 'none';
+                toggleBtn.style.display = 'inline-block';
+                postList.style.display = 'block';
+                loadPosts();
+            });
+    });
+
+    function renderPost(post) {
+        const postDiv = document.createElement('div');
+        postDiv.classList.add('card', 'mb-3');
+
+        const cardBody = document.createElement('div');
+        cardBody.classList.add('card-body');
+
+        const title = document.createElement('h5');
+        title.classList.add('card-title');
+        title.innerText = post.title;
+        title.style.cursor = 'pointer';
+        title.onclick = () => showPostDetail(post.id);
+
+        const content = document.createElement('p');
+        content.classList.add('card-text');
+        content.innerText = post.content;
+
+        const author = document.createElement('p');
+        author.innerHTML = `<small class="text-muted">Author: ${post.author}</small>`;
+
+        const removeButton = document.createElement('button');
+        removeButton.innerText = 'Remove';
+        removeButton.classList.add('btn', 'btn-danger', 'btn-sm', 'float-right');
+        removeButton.onclick = () => {
+            fetch('/api/posts/' + post.id, { method: 'DELETE' }).then(() => {
+                loadPosts();
+            });
+        };
+
+        cardBody.appendChild(title);
+        cardBody.appendChild(content);
+        cardBody.appendChild(author);
+        cardBody.appendChild(removeButton);
+
+        postDiv.appendChild(cardBody);
+        postList.appendChild(postDiv);
+    }
+
+    function loadPosts() {
+        fetch('/api/posts')
+            .then(res => res.json())
+            .then(posts => {
+                postList.innerHTML = '';
+                posts.forEach(renderPost);
+            });
+    }
+
+    function showPostDetail(id) {
+        fetch(`/api/posts/${id}`)
+            .then(res => res.json())
+            .then(post => {
+                currentPostId = post.id;
+                detailTitle.innerText = post.title;
+                detailAuthor.innerText = "Author: " + post.author;
+                detailDate.innerText = new Date(post.date || Date.now()).toLocaleDateString();
+                detailContent.innerText = post.content;
+
+                postList.style.display = 'none';
+                postForm.style.display = 'none';
+                toggleBtn.style.display = 'none';
+                postDetail.style.display = 'block';
+
+                loadComments(post.id);
+            });
+    }
+
+    function loadComments(postId) {
+        fetch(`/api/posts/${postId}/comments`)
+            .then(res => res.json())
+            .then(comments => {
+                commentsList.innerHTML = '';
+                comments.forEach(comment => {
+                    const div = document.createElement('div');
+                    div.classList.add('border', 'p-2', 'mb-2');
+                    div.innerHTML = `<strong>${comment.name}</strong><br>${comment.content}`;
+                    commentsList.appendChild(div);
+                });
+            });
+    }
+
+    commentForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const author = localStorage.getItem('username');
+        const content = document.getElementById('comment-content').value.trim();
+
+        if (!content) {
+            alert("Comment cannot be empty.");
+            return;
+        }
+
+        fetch(`/api/posts/${currentPostId}/comments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: author, content })
+        })
+            .then(res => res.json())
+            .then(() => {
+                document.getElementById('comment-content').value = '';
+                loadComments(currentPostId);
+            });
+    });
+
+    postForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        const author = localStorage.getItem('username');
+        const title = document.getElementById('post-title').value.trim();
+        const content = document.getElementById('post-content').value.trim();
+
+        if (!title || !content) {
+            alert("Title and content must not be empty.");
+            return;
+        }
+
+        fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ author, title, content })
+        })
+            .then(res => res.json())
+            .then(post => {
+                renderPost(post);
+                postForm.reset();
+                postForm.style.display = 'none';
+            });
+    });
+</script>
+
+</body>
+</html>
